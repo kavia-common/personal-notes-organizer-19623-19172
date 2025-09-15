@@ -1,0 +1,37 @@
+---
+import "../styles/theme.css";
+---
+
+<section class="editor card" aria-label="Note editor">
+  <div class="header">
+    <input class="input title" id="note-title" placeholder="Untitled" value="" />
+    <div class="actions">
+      <button id="save-btn" class="btn btn-primary" disabled>Save</button>
+      <button id="new-btn" class="btn">New</button>
+    </div>
+  </div>
+  <textarea id="note-content" class="textarea" placeholder="Start typing..."></textarea>
+  <div class="footer">
+    <span class="badge">Autosave friendly</span>
+    <span class="muted last" aria-live="polite"></span>
+  </div>
+</section>
+
+<style>
+.editor { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.title { font-size: 18px; font-weight: 600; }
+.actions { display: flex; gap: 8px; }
+.footer {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+</style>
+
+

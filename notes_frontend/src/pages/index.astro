@@ -1,11 +1,223 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import Sidebar from '../components/SidebarCategories.astro';
+import NotesList from '../components/NotesList.astro';
+import Editor from '../components/NoteEditor.astro';
+import { getApi, type Note } from '../lib/storage';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+// Page-level initial data will be hydrated via client scripting below.
+// We'll render placeholders first for fast paint and minimalist skeleton feel.
+const initialNotes: Note[] = [];
 ---
 
 <Layout>
-	<Welcome />
+  <section class="app-grid">
+    <Sidebar />
+    <div class="main">
+      <div class="columns">
+        <div class="col list-col">
+          <section class="card list" aria-label="Notes controls">
+            <div class="controls">
+              <input class="input" id="search" type="search" placeholder="Search notes..." value="" />
+            </div>
+          </section>
+          <NotesList items={initialNotes} activeId={null} />
+          <div class="empty card" id="empty-list" aria-hidden="true">
+            <p class="muted">No notes yet. Create a new one to get started.</p>
+          </div>
+        </div>
+        <div class="col editor-col">
+          <Editor />
+          <div class="helper muted">Tip: Your changes are autosaved.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="/src/scripts/notesListClient.ts"></script>
+  <script type="module" src="/src/scripts/noteEditorClient.ts"></script>
+  <script type="module">
+    import { getApi } from "../lib/storage";
+    import { initNotesList } from "../scripts/notesListClient";
+    import { initNoteEditor } from "../scripts/noteEditorClient";
+    // App-level state and event wiring
+    const api = getApi();
+
+    let state = {
+      notes: [],
+      activeId: null,
+      query: "",
+    };
+
+    async function refreshList() {
+      const notes = await api.list();
+      state.notes = notes;
+      if (notes.length && !state.activeId) {
+        state.activeId = notes[0].id;
+      }
+      render();
+    }
+
+    function filteredNotes() {
+      const q = state.query.trim().toLowerCase();
+      if (!q) return state.notes;
+      return state.notes.filter(
+        (n) =>
+          n.title.toLowerCase().includes(q) ||
+          n.content.toLowerCase().includes(q)
+      );
+    }
+
+    function getActive() {
+      return state.notes.find((n) => n.id === state.activeId) ?? null;
+    }
+
+    async function setActive(id) {
+      state.activeId = id;
+      render();
+    }
+
+    async function createNew() {
+      const note = await api.create({ title: "Untitled", content: "" });
+      state.activeId = note.id;
+      await refreshList();
+    }
+
+    async function saveActive(data) {
+      if (!state.activeId) return;
+      await api.update(state.activeId, data);
+      await refreshList();
+    }
+
+    async function deleteById(id) {
+      await api.delete(id);
+      if (state.activeId === id) state.activeId = null;
+      await refreshList();
+    }
+
+    function render() {
+      // NotesList rendering
+      const listRoot = document.querySelector("section.list.card ~ .astro-xxx") as HTMLElement | null;
+      // Fallback: query actual list section by class
+      const listSection = document.querySelector("section.list.card") as HTMLElement | null;
+      const notesListSection = document.querySelector("section.list.card + astro-island, section.list.card + * + astro-island, section.list.card + * + *") || document.querySelector("section.list.card ~ section.list.card");
+      // Manually select the NotesList UL
+      const ul = document.querySelector(".list-col ul.items");
+      const search = document.querySelector("#search") as HTMLInputElement | null;
+      if (search) search.value = state.query;
+      const ulEl = document.querySelector(".list-col ul.items") as HTMLUListElement | null;
+      if (ulEl) {
+        ulEl.innerHTML = "";
+        const items = filteredNotes();
+        items.forEach((n) => {
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <button class="row ${state.activeId === n.id ? "active" : ""}" data-id="${n.id}" type="button">
+              <div class="title">${n.title || "Untitled"}</div>
+              <div class="meta">
+                <span class="badge">${new Date(n.updatedAt).toLocaleString()}</span>
+                <span class="cat">${n.category ?? "General"}</span>
+                <span class="delete" data-action="delete">✕</span>
+              </div>
+            </button>
+          `;
+          ulEl.appendChild(li);
+        });
+      }
+      const empty = document.getElementById("empty-list");
+        if (empty) {
+          empty.style.display = state.notes.length ? "none" : "block";
+        }
+        // rebind interactions
+        document.querySelectorAll(".list-col .row").forEach((row) => {
+          row.addEventListener("click", (e) => {
+            const t = e.target;
+            const id = row.getAttribute("data-id");
+            if (!id) return;
+            if (t && t instanceof HTMLElement && t.dataset.action === "delete") {
+              e.stopPropagation();
+              deleteById(id);
+            } else {
+              setActive(id);
+            }
+          });
+        });
+        const searchEl = document.querySelector("#search") as HTMLInputElement | null;
+        if (searchEl) {
+          searchEl.addEventListener("input", () => {
+            state.query = searchEl.value;
+            render();
+          }, { passive: true });
+        }
+      }
+
+      // Editor rendering
+      const editor = document.querySelector("section.editor.card");
+      if (editor) {
+        const note = getActive();
+        const title = editor.querySelector("#note-title");
+        const content = editor.querySelector("#note-content");
+        const saveBtn = editor.querySelector("#save-btn");
+        if (title) title.value = note?.title ?? "";
+        if (content) content.value = note?.content ?? "";
+        if (saveBtn) saveBtn.disabled = !note;
+        const footer = editor.querySelector(".footer");
+        if (footer) {
+          const last = footer.querySelector(".last") as HTMLElement | null;
+          if (last) {
+            last.textContent = note ? ("Last updated: " + new Date(note.updatedAt).toLocaleString()) : "";
+          }
+        }
+      }
+      // re-init component event bindings after DOM updates
+      const listRoot = document.querySelector("section.list.card");
+      if (listRoot) initNotesList(listRoot as HTMLElement);
+      const editorRoot = document.querySelector("section.editor.card");
+      if (editorRoot) initNoteEditor(editorRoot as HTMLElement);
+    }
+
+    // Global event bus handlers
+    window.addEventListener("notes:select", (e) => {
+      const id = e.detail?.id;
+      if (id) setActive(id);
+    });
+    window.addEventListener("notes:search", (e) => {
+      state.query = e.detail?.query ?? "";
+      render();
+    });
+    window.addEventListener("notes:new", () => createNew());
+    window.addEventListener("notes:save", (e) => saveActive(e.detail ?? {}));
+    window.addEventListener("notes:changed", (e) => {
+      // autosave updates title/content without explicit save click
+      saveActive(e.detail ?? {});
+    });
+
+    // Initialize
+    refreshList();
+  </script>
+
+  <style>
+    .app-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .main { width: 100%; }
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 16px;
+    }
+    .col { min-width: 0; }
+    .empty { margin-top: 8px; padding: 16px; display: none; }
+    .list .controls { padding: 6px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+    .helper { margin-top: 8px; }
+    .muted { color: var(--muted); }
+
+    @media (max-width: 960px) {
+      .app-grid { grid-template-columns: 1fr; }
+      .columns { grid-template-columns: 1fr; }
+    }
+  </style>
 </Layout>

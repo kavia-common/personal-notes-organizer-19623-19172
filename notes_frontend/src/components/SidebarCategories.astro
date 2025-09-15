@@ -1,0 +1,63 @@
+---
+interface Props {
+  categories: string[];
+  active?: string;
+}
+const { categories = ["All", "General", "Ideas", "Work", "Personal"], active = "All" } = Astro.props as Props;
+---
+
+<aside class="sidebar card" aria-label="Categories Sidebar">
+  <div class="header">
+    <span class="muted">Categories</span>
+  </div>
+  <ul class="list" role="list">
+    {categories.map((cat) => (
+      <li>
+        <button class={`item ${active === cat ? "active" : ""}`} data-category={cat} type="button">
+          <span class="dot" aria-hidden="true"></span>
+          <span>{cat}</span>
+        </button>
+      </li>
+    ))}
+  </ul>
+</aside>
+
+<style>
+.sidebar {
+  width: 240px;
+  padding: 12px;
+  height: calc(100dvh - 120px);
+  margin: 0 0 0 16px;
+  position: sticky;
+  top: 84px;
+}
+.header { padding: 8px 6px 12px; }
+.muted { color: var(--muted); font-size: 12px; }
+
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.item:hover { background: var(--bg); border-color: var(--border); }
+.item.active {
+  background: var(--bg);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(55,65,81,0.12);
+}
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px;
+  background: var(--color-primary);
+}
+@media (max-width: 960px) {
+  .sidebar { display: none; }
+}
+</style>
